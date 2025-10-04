@@ -1,0 +1,667 @@
+openapi: 3.0.3
+info:
+  title: Gin Mania Backend API
+  version: 0.1.0
+  description: |
+    MVP API specification for Gin Mania backend. Covers public catalogue endpoints,
+    member tasting log operations, and administrator management workflows.
+servers:
+  - url: https://api.ginmania.local
+    description: Example base URL for staging
+  - url: http://localhost:8080
+    description: Local development server
+tags:
+  - name: Health
+  - name: Catalogue
+  - name: Metadata
+  - name: Tastings
+  - name: Administration
+paths:
+  /api/v1/healthz:
+    get:
+      summary: Health check
+      tags: [Health]
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /api/v1/gins:
+    get:
+      summary: Search gin catalogue
+      tags: [Catalogue]
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Search phrase for name, description, or botanicals
+        - in: query
+          name: region
+          schema:
+            type: string
+          description: Filter by production region
+        - in: query
+          name: botanical
+          schema:
+            type: string
+          description: Filter by botanical slug
+        - in: query
+          name: flavor_tag
+          schema:
+            type: string
+          description: Filter by flavor tag code
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: page_size
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Matching gins
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GinListResponse'
+  /api/v1/gins/{ginId}:
+    get:
+      summary: Get gin details
+      tags: [Catalogue]
+      parameters:
+        - in: path
+          name: ginId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Gin detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GinDetailResponse'
+        '404':
+          description: Gin not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/meta/botanicals:
+    get:
+      summary: List available botanicals
+      tags: [Metadata]
+      responses:
+        '200':
+          description: Botanical catalog
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BotanicalListResponse'
+  /api/v1/meta/flavor-tags:
+    get:
+      summary: List available flavor tags
+      tags: [Metadata]
+      responses:
+        '200':
+          description: Flavor tag catalog
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FlavorTagListResponse'
+  /api/v1/tastings:
+    get:
+      summary: List tasting logs for current user
+      security:
+        - BearerAuth: []
+      tags: [Tastings]
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, published, rejected]
+          description: Filter tasting logs by moderation status
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: page_size
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Tasting log list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TastingListResponse'
+    post:
+      summary: Create tasting log
+      security:
+        - BearerAuth: []
+      tags: [Tastings]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TastingCreateRequest'
+      responses:
+        '201':
+          description: Tasting log created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TastingResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/tastings/{tastingId}:
+    patch:
+      summary: Update tasting log
+      security:
+        - BearerAuth: []
+      tags: [Tastings]
+      parameters:
+        - in: path
+          name: tastingId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TastingUpdateRequest'
+      responses:
+        '200':
+          description: Updated tasting log
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TastingResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Tasting log not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/admin/gins:
+    post:
+      summary: Create gin entry
+      security:
+        - BearerAuth: []
+      tags: [Administration]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GinUpsertRequest'
+      responses:
+        '201':
+          description: Gin created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GinDetailResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/admin/gins/{ginId}:
+    put:
+      summary: Update gin entry
+      security:
+        - BearerAuth: []
+      tags: [Administration]
+      parameters:
+        - in: path
+          name: ginId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GinUpsertRequest'
+      responses:
+        '200':
+          description: Gin updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GinDetailResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Gin not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Archive gin entry
+      security:
+        - BearerAuth: []
+      tags: [Administration]
+      parameters:
+        - in: path
+          name: ginId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Gin archived
+        '404':
+          description: Gin not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/admin/gins/import:
+    post:
+      summary: Import gin catalogue from CSV
+      security:
+        - BearerAuth: []
+      tags: [Administration]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: CSV file following the published template
+      responses:
+        '202':
+          description: Import accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CsvImportResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/admin/reviews:
+    get:
+      summary: List tasting logs pending moderation
+      security:
+        - BearerAuth: []
+      tags: [Administration]
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, published, rejected]
+        - in: query
+          name: user_id
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - in: query
+          name: page_size
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Moderation queue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TastingListResponse'
+  /api/v1/admin/reviews/{tastingId}:
+    patch:
+      summary: Moderate tasting log
+      security:
+        - BearerAuth: []
+      tags: [Administration]
+      parameters:
+        - in: path
+          name: tastingId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModerationActionRequest'
+      responses:
+        '200':
+          description: Moderation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TastingResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Tasting log not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+        timestamp:
+          type: string
+          format: date-time
+      required: [status, timestamp]
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        code:
+          type: string
+        details:
+          type: array
+          items:
+            type: string
+      required: [message]
+    GinListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/GinSummary'
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalCount:
+          type: integer
+      required: [items, page, pageSize, totalCount]
+    GinDetailResponse:
+      allOf:
+        - $ref: '#/components/schemas/Gin'
+    GinSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        distillery:
+          type: string
+        region:
+          type: string
+        abv:
+          type: number
+          format: float
+        botanicals:
+          type: array
+          items:
+            type: string
+        flavorTags:
+          type: array
+          items:
+            $ref: '#/components/schemas/FlavorTag'
+        status:
+          type: string
+          enum: [draft, published, archived]
+        imageUrl:
+          type: string
+          format: uri
+      required: [id, name, region, abv, botanicals, flavorTags, status]
+    Gin:
+      allOf:
+        - $ref: '#/components/schemas/GinSummary'
+        - type: object
+          properties:
+            tastingNotes:
+              type: string
+            recommendedServe:
+              $ref: '#/components/schemas/RecommendedServe'
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+    RecommendedServe:
+      type: object
+      properties:
+        description:
+          type: string
+      required: [description]
+    FlavorTag:
+      type: object
+      properties:
+        code:
+          type: string
+        label:
+          type: string
+      required: [code, label]
+    BotanicalListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Botanical'
+      required: [items]
+    Botanical:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+      required: [id, name]
+    FlavorTagListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/FlavorTag'
+      required: [items]
+    GinUpsertRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        distillery:
+          type: string
+        region:
+          type: string
+        abv:
+          type: number
+          format: float
+        tastingNotes:
+          type: string
+        imageUrl:
+          type: string
+          format: uri
+        botanicals:
+          type: array
+          items:
+            type: string
+        flavorTags:
+          type: array
+          items:
+            type: string
+        recommendedServe:
+          $ref: '#/components/schemas/RecommendedServe'
+        status:
+          type: string
+          enum: [draft, published]
+      required: [name, region, abv, botanicals, flavorTags, status]
+    TastingResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        ginId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        memo:
+          type: string
+        tastedAt:
+          type: string
+          format: date
+        status:
+          type: string
+          enum: [pending, published, rejected]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, ginId, userId, rating, tastedAt, status, createdAt, updatedAt]
+    TastingCreateRequest:
+      type: object
+      properties:
+        ginId:
+          type: string
+          format: uuid
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        memo:
+          type: string
+          maxLength: 1000
+        tastedAt:
+          type: string
+          format: date
+      required: [ginId, rating, tastedAt]
+    TastingUpdateRequest:
+      type: object
+      properties:
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+        memo:
+          type: string
+          maxLength: 1000
+        tastedAt:
+          type: string
+          format: date
+      minProperties: 1
+    TastingListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TastingResponse'
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        totalCount:
+          type: integer
+      required: [items, page, pageSize, totalCount]
+    ModerationActionRequest:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [approve, reject]
+        note:
+          type: string
+          maxLength: 500
+      required: [action]
+    CsvImportResponse:
+      type: object
+      properties:
+        jobId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued, processing, completed, failed]
+        summary:
+          type: object
+          additionalProperties:
+            type: integer
+      required: [jobId, status]
