@@ -1,79 +1,41 @@
 package search
 
-import "strings"
+import (
+	"context"
+	"errors"
+)
 
-// Gin represents a gin entry in the catalogue.
-type Gin struct {
-	Name        string   `json:"name"`
-	Country     string   `json:"country"`
-	Botanicals  []string `json:"botanicals"`
-	Description string   `json:"description"`
+var (
+	// ErrRepositoryNotConfigured indicates that the service was constructed without a backing repository.
+	ErrRepositoryNotConfigured = errors.New("search repository not configured")
+	// ErrInvalidPagination is returned when the requested pagination parameters are negative.
+	ErrInvalidPagination = errors.New("invalid pagination parameters")
+)
+
+// Service provides search capabilities backed by a repository implementation.
+type Service struct {
+	repo Repository
 }
 
-var catalogue = []Gin{
-	{
-		Name:        "Hendrick's",
-		Country:     "Scotland",
-		Botanicals:  []string{"cucumber", "rose"},
-		Description: "Known for its delicate infusion of cucumber and rose petals.",
-	},
-	{
-		Name:        "Tanqueray No. Ten",
-		Country:     "England",
-		Botanicals:  []string{"grapefruit", "lime", "chamomile"},
-		Description: "A citrus-forward gin crafted in small batches with fresh fruits.",
-	},
-	{
-		Name:        "Four Pillars Rare Dry",
-		Country:     "Australia",
-		Botanicals:  []string{"orange", "pepperberry", "lemon myrtle"},
-		Description: "Combines native Australian botanicals with traditional gin notes.",
-	},
-	{
-		Name:        "Ki No Bi Kyoto Dry",
-		Country:     "Japan",
-		Botanicals:  []string{"yuzu", "green tea", "ginger"},
-		Description: "A dry gin that showcases Japanese botanicals from the Kyoto region.",
-	},
+// NewService constructs a new Service using the provided repository.
+func NewService(repo Repository) *Service {
+	return &Service{repo: repo}
 }
 
-// Search returns gins that match the given query.
-func Search(query string) []Gin {
-	trimmed := strings.TrimSpace(query)
-	if trimmed == "" {
-		return catalogue
+// Search retrieves gins that satisfy the provided filter parameters.
+func (s *Service) Search(ctx context.Context, filter SearchFilter) ([]Gin, error) {
+	if s.repo == nil {
+		return nil, ErrRepositoryNotConfigured
 	}
 
-	needle := strings.ToLower(trimmed)
-	results := make([]Gin, 0, len(catalogue))
-
-	for _, gin := range catalogue {
-		if matches(gin, needle) {
-			results = append(results, gin)
-		}
+	if filter.Limit < 0 || filter.Offset < 0 {
+		return nil, ErrInvalidPagination
 	}
 
-	return results
+	return s.repo.Search(ctx, filter)
 }
 
-func matches(g Gin, needle string) bool {
-	if strings.Contains(strings.ToLower(g.Name), needle) {
-		return true
-	}
-
-	if strings.Contains(strings.ToLower(g.Country), needle) {
-		return true
-	}
-
-	if strings.Contains(strings.ToLower(g.Description), needle) {
-		return true
-	}
-
-	for _, botanical := range g.Botanicals {
-		if strings.Contains(strings.ToLower(botanical), needle) {
-			return true
-		}
-	}
-
-	return false
+// SearchByQuery is a convenience wrapper for simple query-driven searches without pagination.
+func (s *Service) SearchByQuery(ctx context.Context, query string) ([]Gin, error) {
+	return s.Search(ctx, SearchFilter{Query: query})
 }
