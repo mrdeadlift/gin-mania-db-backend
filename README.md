@@ -24,6 +24,11 @@ A starter Go service built with the Gin framework that exposes a world gin searc
    curl "http://localhost:8080/gins?q=kyoto"
    ```
 
+## Database Migrations
+- Install golang-migrate or equivalent tooling.
+- Run `migrate -path db/migrations -database "$DATABASE_URL" up` before starting the server.
+- Use the paired down migration when rolling back: `migrate -path db/migrations -database "$DATABASE_URL" down 1`.
+
 ## Project Layout
 - `cmd/server/main.go` – Application entry point and HTTP routes.
 - `internal/search` – In-memory search logic and sample catalogue data.
