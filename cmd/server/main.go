@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -22,7 +23,7 @@ func main() {
 	}
 
 	db, err := database.OpenPostgres(context.Background(), database.Config{
-		DSN:             os.Getenv("DATABASE_URL"),
+		DSN:             resolveDatabaseURL(),
 		MaxIdleConns:    10,
 		MaxOpenConns:    50,
 		ConnMaxLifetime: time.Hour,
@@ -98,4 +99,12 @@ func parseSearchFilter(c *gin.Context) (search.SearchFilter, error) {
 	}
 
 	return filter, nil
+}
+
+func resolveDatabaseURL() string {
+	if dsn := strings.TrimSpace(os.Getenv("DATABASE_URL")); dsn != "" {
+		return dsn
+	}
+
+	return "postgresql://gin_admin:gin_admin_password@localhost:5432/gin_mania?sslmode=disable"
 }

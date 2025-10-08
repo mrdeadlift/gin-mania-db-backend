@@ -28,6 +28,11 @@ A starter Go service built with the Gin framework that exposes a world gin searc
 - Install golang-migrate or equivalent tooling.
 - Run `migrate -path db/migrations -database "$DATABASE_URL" up` before starting the server.
 - Use the paired down migration when rolling back: `migrate -path db/migrations -database "$DATABASE_URL" down 1`.
+- The application falls back to `postgresql://gin_admin:gin_admin_password@localhost:5432/gin_mania?sslmode=disable` when `DATABASE_URL` is unset, matching the docker-compose service.
+
+## Local Database
+- Start PostgreSQL for local development with `docker-compose up -d postgres`.
+- The database is exposed on `localhost:5432` with credentials `gin_admin` / `gin_admin_password` and database `gin_mania`.
 
 ## Project Layout
 - `cmd/server/main.go` – Application entry point and HTTP routes.
