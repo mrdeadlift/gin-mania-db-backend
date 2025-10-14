@@ -1,10 +1,10 @@
 # 実装タスクリスト
 
 ## フェーズ0: 基盤整備
-- [ ] `internal/config`で環境変数ロードとバリデーションを行う設定モジュールを実装する（DB/Redis/Auth0/ログ出力設定）。
-- [ ] zapベースの構造化ロギングラッパーを追加し、HTTPリクエストIDとコンテキスト情報を出力できるようにする。
-- [ ] `internal/http/router`を作成し、ルート登録と共通ミドルウェア（リカバリ、CORS、ロギング、リクエストID）を集中管理する。
-- [ ] `cmd/server/main.go`をDIエントリポイント化し、将来のサービス追加に備えて初期化処理をモジュール化する。
+- [x] `internal/config`で環境変数ロードとバリデーションを行う設定モジュールを実装する（DB/Redis/Auth0/ログ出力設定）。
+- [x] zapベースの構造化ロギングラッパーを追加し、HTTPリクエストIDとコンテキスト情報を出力できるようにする。
+- [x] `internal/http/router`を作成し、ルート登録と共通ミドルウェア（リカバリ、CORS、ロギング、リクエストID）を集中管理する。
+- [x] `cmd/server/main.go`をDIエントリポイント化し、将来のサービス追加に備えて初期化処理をモジュール化する。
 
 ## フェーズ1: データモデルとマイグレーション
 - [ ] `users`/`gins`/`botanicals`/`gin_botanicals`/`flavor_tags`/`gin_flavor_tags`/`recommended_serves`/`tasting_logs`/`moderation_events`/`csv_import_jobs`のスキーマをマイグレーションで定義する（enum相当はCHECK制約で実装）。

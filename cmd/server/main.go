@@ -3,108 +3,119 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
+	"fmt"
 	"net/http"
 	"os"
-	"strconv"
-	"strings"
+	"os/signal"
+	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 
+	"gin-mania-backend/internal/config"
+	httpRouter "gin-mania-backend/internal/http/router"
 	"gin-mania-backend/internal/search"
 	"gin-mania-backend/pkg/database"
+	"gin-mania-backend/pkg/logging"
 )
 
 func main() {
-	gin.SetMode(gin.ReleaseMode)
-	if mode := os.Getenv("GIN_MODE"); mode != "" {
-		gin.SetMode(mode)
+	if err := run(context.Background()); err != nil {
+		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run(ctx context.Context) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
 	}
 
-	db, err := database.OpenPostgres(context.Background(), database.Config{
-		DSN:             resolveDatabaseURL(),
-		MaxIdleConns:    10,
-		MaxOpenConns:    50,
-		ConnMaxLifetime: time.Hour,
+	logger, err := logging.NewLogger(cfg.Logging)
+	if err != nil {
+		return fmt.Errorf("initialize logger: %w", err)
+	}
+	defer func() { _ = logger.Sync() }()
+
+	db, err := database.OpenPostgres(ctx, database.Config{
+		DSN:             cfg.Database.DSN,
+		MaxIdleConns:    cfg.Database.MaxIdleConns,
+		MaxOpenConns:    cfg.Database.MaxOpenConns,
+		ConnMaxLifetime: cfg.Database.ConnMaxLifetime,
+		ConnMaxIdleTime: cfg.Database.ConnMaxIdleTime,
 	})
 	if err != nil {
-		log.Fatalf("failed to initialize database connection: %v", err)
+		return fmt.Errorf("open database: %w", err)
 	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		return fmt.Errorf("retrieve sql DB: %w", err)
+	}
+	defer sqlDB.Close()
 
 	searchService := search.NewService(search.NewRepository(db))
 
-	r := gin.Default()
-
-	r.GET("/healthz", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	engine, err := httpRouter.New(cfg, logger, httpRouter.Dependencies{
+		SearchService: searchService,
 	})
-
-	r.GET("/gins", func(c *gin.Context) {
-		filter, err := parseSearchFilter(c)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-			return
-		}
-
-		results, err := searchService.Search(c.Request.Context(), filter)
-		if err != nil {
-			status := http.StatusInternalServerError
-			if errors.Is(err, search.ErrInvalidPagination) {
-				status = http.StatusBadRequest
-			}
-
-			c.JSON(status, gin.H{"error": err.Error()})
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"query":   filter.Query,
-			"limit":   filter.Limit,
-			"offset":  filter.Offset,
-			"results": results,
-		})
-	})
-
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+	if err != nil {
+		return fmt.Errorf("initialize router: %w", err)
 	}
 
-	log.Printf("Starting Gin Mania server on port %s", port)
-	if err := r.Run(":" + port); err != nil {
-		log.Fatalf("failed to start server: %v", err)
+	server := &http.Server{
+		Addr:         cfg.Server.Address,
+		Handler:      engine,
+		ReadTimeout:  cfg.Server.ReadTimeout,
+		WriteTimeout: cfg.Server.WriteTimeout,
 	}
+
+	logger.Info("starting Gin Mania server",
+		zap.String("address", server.Addr),
+		zap.String("environment", cfg.App.Environment),
+	)
+
+	if err := startServer(ctx, server, logger, cfg.Server.ShutdownTimeout); err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func parseSearchFilter(c *gin.Context) (search.SearchFilter, error) {
-	filter := search.SearchFilter{
-		Query: c.Query("q"),
-	}
-
-	if limitStr := c.Query("limit"); limitStr != "" {
-		limit, err := strconv.Atoi(limitStr)
-		if err != nil || limit < 0 {
-			return search.SearchFilter{}, errors.New("limit must be a non-negative integer")
+func startServer(ctx context.Context, server *http.Server, logger *zap.Logger, shutdownTimeout time.Duration) error {
+	errCh := make(chan error, 1)
+	go func() {
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- err
 		}
-		filter.Limit = limit
-	}
+		close(errCh)
+	}()
 
-	if offsetStr := c.Query("offset"); offsetStr != "" {
-		offset, err := strconv.Atoi(offsetStr)
-		if err != nil || offset < 0 {
-			return search.SearchFilter{}, errors.New("offset must be a non-negative integer")
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			return fmt.Errorf("listen and serve: %w", err)
 		}
-		filter.Offset = offset
+		return nil
+	case sig := <-sigCh:
+		logger.Info("shutdown signal received", zap.String("signal", sig.String()))
 	}
 
-	return filter, nil
-}
+	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
+	defer cancel()
 
-func resolveDatabaseURL() string {
-	if dsn := strings.TrimSpace(os.Getenv("DATABASE_URL")); dsn != "" {
-		return dsn
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			logger.Error("server shutdown timed out", zap.Duration("timeout", shutdownTimeout))
+		}
+		return fmt.Errorf("server shutdown: %w", err)
 	}
 
-	return "postgresql://gin_admin:gin_admin_password@localhost:5432/gin_mania?sslmode=disable"
+	logger.Info("server stopped gracefully")
+	return nil
 }
